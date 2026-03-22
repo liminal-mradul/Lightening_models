@@ -112,3 +112,4 @@ node's estimated position.  Five built-in patterns:
 | `CHECKERBOARD` | 3-D alternating colour cubes with rotating hue |
 | `RADIAL` | Concentric rings expanding from centre |
 | `CHASE` | Bright band sweeping through the swarm along Z |
+| `IMAGE` | Brightness mask from a user-supplied B/W image projected onto the XY plane |
