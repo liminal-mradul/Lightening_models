@@ -95,6 +95,16 @@ def parse_args(argv=None):
         action="store_true",
         help="Invert the brightness mask from the image (black ↔ white)",
     )
+    parser.add_argument(
+        "--interactive-html",
+        default=None,
+        metavar="PATH",
+        help=(
+            "Save an interactive 3-D HTML viewer (Plotly) to this path. "
+            "When omitted, the file is written to <output-dir>/swarm_interactive.html. "
+            "Pass 'none' to skip generating the interactive viewer entirely."
+        ),
+    )
     return parser.parse_args(argv)
 
 
@@ -173,6 +183,7 @@ def main(argv=None):
         viz,
         video_created_path,  # None triggers default animation export (covers live without --video-path)
         args.save,
+        interactive_html=args.interactive_html,
     )
 
     for label, path in export_paths.items():
@@ -182,7 +193,7 @@ def main(argv=None):
     print("[swarm] Done.")
 
 
-def export_outputs(sim: Simulation, output_dir: str, viz: "SwarmVisualizer", prerendered_video_path: Optional[str], snapshot_override: Optional[str]) -> Dict[str, str]:
+def export_outputs(sim: Simulation, output_dir: str, viz: "SwarmVisualizer", prerendered_video_path: Optional[str], snapshot_override: Optional[str], interactive_html: Optional[str] = None) -> Dict[str, str]:
     """Persist simulation artefacts (plots, CSV, optional animation) to *output_dir*.
 
     Parameters
@@ -197,6 +208,9 @@ def export_outputs(sim: Simulation, output_dir: str, viz: "SwarmVisualizer", pre
         If provided, use this pre-rendered animation path and skip creating a new clip.
     snapshot_override:
         Optional custom snapshot path; defaults to <output_dir>/swarm_snapshot.png.
+    interactive_html:
+        Path for the interactive Plotly HTML viewer.  Defaults to
+        ``<output_dir>/swarm_interactive.html``.  Pass ``'none'`` to skip.
 
     Returns
     -------
@@ -260,6 +274,20 @@ def export_outputs(sim: Simulation, output_dir: str, viz: "SwarmVisualizer", pre
         "Animation (GIF)": video_out,
     }
     result.update(pattern_image_paths)
+
+    # --- Interactive 3-D HTML viewer (Plotly) ---
+    skip_interactive = isinstance(interactive_html, str) and interactive_html.lower() == "none"
+    if not skip_interactive:
+        html_path = interactive_html or os.path.join(output_dir, "swarm_interactive.html")
+        try:
+            from swarm.interactive_viewer import SwarmInteractiveViewer
+            html_sim = _build_animation_sim(sim)
+            iv = SwarmInteractiveViewer(html_sim)
+            iv.save_html(html_path, n_steps=SNIPPET_STEPS, frame_duration_ms=DEFAULT_INTERVAL_MS * 2)
+            result["Interactive 3-D HTML"] = html_path
+        except Exception as exc:  # pragma: no cover
+            print(f"[swarm] Warning: Could not generate interactive HTML: {exc}")
+
     return result
 
 
