@@ -1,0 +1,26 @@
+# Python bytecode
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Distribution / packaging
+*.egg-info/
+dist/
+build/
+
+# Pytest cache
+.pytest_cache/
+
+# Generated snapshots / animations (don't commit large media)
+swarm_snapshot.png
+*.gif
+*.mp4
+
+# Editor / OS artifacts
+.DS_Store
+*.swp
