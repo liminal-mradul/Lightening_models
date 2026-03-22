@@ -73,9 +73,11 @@ python main.py --nodes 120 --image-pattern assets/logo_bw.png --pattern image
 
 Running the script always exports:
 - `relative_positions.csv` – estimated positions of each node (relative space)
-- `swarm_snapshot.png` – 3-D scatter plot
-- `swarm_topdown.png` – XY projection of the swarm
-- `swarm_animation.gif` – short animation clip (or your provided `--video-path`)
+- `swarm_snapshot.png` – 3-D scatter plot (current pattern)
+- `swarm_topdown.png` – XY top-down projection (current pattern)
+- `swarm_animation.gif` – short GIF animation clip showing patterns forming (or your provided `--video-path`)
+- `patterns/pattern_<name>_3d.png` – 3-D perspective view for each individual pattern (e.g. `pattern_wave_3d.png`)
+- `patterns/pattern_<name>_topdown.png` – top-down XY view for each individual pattern (e.g. `pattern_wave_topdown.png`)
 
 ---
 
