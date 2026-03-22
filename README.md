@@ -35,7 +35,7 @@ tests/                # Unit tests (pytest)
 ```bash
 pip install -r requirements.txt
 
-# Run a 60-step demo cycling through all patterns and save a PNG snapshot
+# Run a 60-step demo cycling through all patterns and save artefacts into ./swarm_output
 python main.py
 
 # Show a specific pattern for 100 steps
@@ -46,6 +46,12 @@ python main.py --steps 80 --movement
 
 # Save snapshot to a custom path
 python main.py --save my_snapshot.png
+
+# Live 3-D view with an animation saved to disk
+SWARM_INTERACTIVE=1 python main.py --live --video-path runs/demo.gif
+
+# Project a black/white image as a pattern with 120 nodes
+python main.py --nodes 120 --image-pattern assets/logo_bw.png --pattern image
 ```
 
 ### CLI options
@@ -54,10 +60,22 @@ python main.py --save my_snapshot.png
 |------|---------|-------------|
 | `--steps N` | 60 | Number of simulation timesteps |
 | `--nodes N` | 80 | Number of swarm nodes |
-| `--pattern NAME` | all | `wave`, `sphere`, `checkerboard`, `radial`, `chase`, or `all` |
-| `--save PATH` | `swarm_snapshot.png` | Output PNG path |
+| `--pattern NAME` | all | `wave`, `sphere`, `checkerboard`, `radial`, `chase`, `image`, or `all` |
+| `--save PATH` | `swarm_output/swarm_snapshot.png` | Output PNG path |
 | `--seed N` | 42 | Random seed for reproducibility |
 | `--movement` | off | Enable random per-step node movement |
+| `--output-dir PATH` | `swarm_output` | Directory to collect CSV, plots, and video |
+| `--live` | off | Show a live 3-D matplotlib window (requires GUI backend; set `SWARM_INTERACTIVE=1`) |
+| `--video-path PATH` | none | Save an animation to this path (gif/mp4); defaults to `swarm_output/swarm_animation.gif` |
+| `--image-pattern PATH` | none | Load a black/white image and map brightness onto the swarm (requires `--pattern image` or `--pattern all`) |
+| `--image-threshold FLOAT` | 0.5 | Threshold (0–1) for turning LEDs on in image pattern |
+| `--image-invert` | off | Invert brightness from the supplied image |
+
+Running the script always exports:
+- `relative_positions.csv` – estimated positions of each node (relative space)
+- `swarm_snapshot.png` – 3-D scatter plot
+- `swarm_topdown.png` – XY projection of the swarm
+- `swarm_animation.gif` – short animation clip (or your provided `--video-path`)
 
 ---
 

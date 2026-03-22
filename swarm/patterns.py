@@ -17,9 +17,10 @@ from __future__ import annotations
 
 import math
 from enum import Enum, auto
-from typing import List
+from typing import List, Optional, Tuple
 
 import numpy as np
+from PIL import Image
 
 from .node import Node
 
@@ -30,6 +31,7 @@ class PatternType(Enum):
     CHECKERBOARD = auto()
     RADIAL = auto()
     CHASE = auto()
+    IMAGE = auto()
 
 
 # Color palette (RGB, values in [0, 1])
@@ -60,6 +62,9 @@ class PatternEngine:
 
     def __init__(self, nodes: List[Node]) -> None:
         self.nodes = nodes
+        self._image_pattern: Optional[np.ndarray] = None
+        self._image_threshold: float = 0.5
+        self._image_invert: bool = False
 
     # ------------------------------------------------------------------
     # Public API
@@ -83,11 +88,37 @@ class PatternEngine:
             PatternType.CHECKERBOARD: self._checkerboard,
             PatternType.RADIAL: self._radial,
             PatternType.CHASE: self._chase,
+            PatternType.IMAGE: self._apply_image_pattern,
         }
         fn = dispatch.get(pattern)
         if fn is None:
             raise ValueError(f"Unknown pattern: {pattern}")
         fn(norm_positions, t)
+
+    # ------------------------------------------------------------------
+    # Image pattern helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def load_bw_image(path: str) -> np.ndarray:
+        """Load a black/white image into a normalised numpy array in [0, 1]."""
+        img = Image.open(path).convert("L")  # grayscale
+        arr = np.asarray(img, dtype=float) / 255.0
+        return arr
+
+    def set_image_pattern(self, image: np.ndarray, threshold: float = 0.5, invert: bool = False) -> None:
+        """Configure an image-based brightness mask (values in [0,1])."""
+        if image.ndim != 2:
+            raise ValueError("Image pattern must be a 2-D grayscale array.")
+        self._image_pattern = np.clip(image, 0.0, 1.0)
+        self._image_threshold = float(threshold)
+        self._image_invert = bool(invert)
+
+    def get_image_pattern_config(self) -> Optional[Tuple[np.ndarray, float, bool]]:
+        """Return a copy of the current image pattern settings if configured."""
+        if self._image_pattern is None:
+            return None
+        return (self._image_pattern.copy(), self._image_threshold, self._image_invert)
 
     # ------------------------------------------------------------------
     # Position helpers
@@ -185,3 +216,25 @@ class PatternEngine:
                 # Faint residual glow based on proximity
                 glow = max(0.0, 0.08 * (1.0 - dist))
                 node.set_led((glow * 0.5, glow * 0.5, glow), on=True)
+
+    def _apply_image_pattern(self, pos: np.ndarray, t: float) -> None:
+        """Map node brightness from a user-provided black/white image."""
+        if self._image_pattern is None:
+            raise ValueError("Image pattern not configured. Call set_image_pattern first.")
+        height, width = self._image_pattern.shape
+        width_minus_1 = width - 1
+        height_minus_1 = height - 1
+        white = COLORS["white"]
+        for i, node in enumerate(self.nodes):
+            # Map XY in [-1,1] -> pixel indices
+            x = np.clip((pos[i, 0] + 1.0) / 2.0, 0.0, 1.0)
+            y = np.clip((pos[i, 1] + 1.0) / 2.0, 0.0, 1.0)
+            col = int(round(x * width_minus_1))
+            row = int(round((1.0 - y) * height_minus_1))
+            brightness = self._image_pattern[row, col]
+            if self._image_invert:
+                brightness = 1.0 - brightness
+            if brightness < self._image_threshold:
+                node.set_led((0.0, 0.0, 0.0), on=False)
+            else:
+                node.set_led(tuple((brightness * white).tolist()), on=True)

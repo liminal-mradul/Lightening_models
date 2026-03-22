@@ -16,19 +16,28 @@ def _ready_env(n=30, seed=0):
     return env
 
 
+@pytest.fixture
+def bw_image():
+    return np.array([[0.0, 1.0], [1.0, 0.0]])
+
+
 class TestPatternEngineApply:
     @pytest.mark.parametrize("pattern", list(PatternType))
-    def test_all_patterns_run(self, pattern):
+    def test_all_patterns_run(self, pattern, bw_image):
         env = _ready_env()
         engine = PatternEngine(env.nodes)
+        if pattern is PatternType.IMAGE:
+            engine.set_image_pattern(bw_image)
         # Should not raise
         engine.apply(pattern, t=0.0)
         engine.apply(pattern, t=2.5)
 
     @pytest.mark.parametrize("pattern", list(PatternType))
-    def test_led_colors_in_range(self, pattern):
+    def test_led_colors_in_range(self, pattern, bw_image):
         env = _ready_env()
         engine = PatternEngine(env.nodes)
+        if pattern is PatternType.IMAGE:
+            engine.set_image_pattern(bw_image)
         engine.apply(pattern, t=1.0)
         for node in env.nodes:
             assert np.all(node.led_color >= 0.0)
@@ -68,3 +77,21 @@ class TestPatternEngineApply:
         engine.apply(PatternType.SPHERE, t=0.0)
         lit = [n for n in env.nodes if n.led_on]
         assert len(lit) > 0
+
+    def test_image_pattern_respects_threshold_and_invert(self, bw_image):
+        env = _ready_env(n=4)
+        engine = PatternEngine(env.nodes)
+        engine.set_image_pattern(bw_image, threshold=0.6, invert=True)
+        coords = np.array(
+            [
+                [-1.0, -1.0, 0.0],
+                [1.0, -1.0, 0.0],
+                [-1.0, 1.0, 0.0],
+                [1.0, 1.0, 0.0],
+            ]
+        )
+        for node, coord in zip(env.nodes, coords):
+            node.estimated_position = coord
+        engine.apply(PatternType.IMAGE, t=0.0)
+        states = [n.led_on for n in env.nodes]
+        assert states == [False, True, True, False]
