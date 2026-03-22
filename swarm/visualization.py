@@ -94,7 +94,7 @@ class SwarmVisualizer:
 
         pattern_name = self.sim.current_pattern.name
         title = (
-            f"Swarm Visualization  |  Pattern: {pattern_name}"
+            f"Swarm  |  Pattern forming: {pattern_name}"
             f"  |  t={self.sim.t:.1f}  |  N={len(self.sim.env.nodes)}"
         )
         if self._title_text is not None:
@@ -111,10 +111,20 @@ class SwarmVisualizer:
 
     # ------------------------------------------------------------------
 
-    def save_topdown(self, filepath: str) -> None:
-        """Save a 2-D top-down projection (XY plane) to *filepath*."""
+    def save_topdown(self, filepath: str, pattern_name: Optional[str] = None) -> None:
+        """Save a 2-D top-down projection (XY plane) to *filepath*.
+
+        Parameters
+        ----------
+        filepath:
+            Destination file path.
+        pattern_name:
+            Optional pattern name used in the plot title.  When *None* the
+            current simulation pattern is used.
+        """
         positions = self.sim.env.get_positions()
         display_colors = self._display_colors()
+        label = pattern_name or self.sim.current_pattern.name
 
         fig, ax = plt.subplots(figsize=(8, 6))
         ax.scatter(
@@ -126,7 +136,7 @@ class SwarmVisualizer:
         )
         ax.set_xlabel("X")
         ax.set_ylabel("Y")
-        ax.set_title("Swarm Top-Down View (XY)")
+        ax.set_title(f"Pattern: {label}  –  Top-Down View (XY)")
         ax.set_aspect("equal")
         bounds = self.sim.env.bounds
         ax.set_xlim(-bounds[0], bounds[0])
@@ -155,7 +165,7 @@ class SwarmVisualizer:
             Milliseconds between frames (for interactive display).
         save_path:
             If provided, save the animation to this file (requires ffmpeg or
-            pillow depending on format).
+            pillow depending on format).  GIF files are generated via Pillow.
         fps:
             Frames per second when saving.
         """
@@ -179,8 +189,12 @@ class SwarmVisualizer:
             writer = None
             if ext == ".gif":
                 writer = "pillow"
+                print(f"[viz] Generating GIF animation ({n_steps} frames @ {fps} fps) → {save_path}")
             elif ext in {".mp4", ".m4v"}:
                 writer = "ffmpeg"
+                print(f"[viz] Generating MP4 animation ({n_steps} frames @ {fps} fps) → {save_path}")
+            else:
+                print(f"[viz] Generating animation ({n_steps} frames @ {fps} fps) → {save_path}")
             try:
                 if writer is not None:
                     anim.save(save_path, fps=fps, dpi=100, writer=writer)
@@ -188,6 +202,10 @@ class SwarmVisualizer:
                     anim.save(save_path, fps=fps, dpi=100)
             except (ValueError, RuntimeError, OSError) as exc:  # pragma: no cover - depends on system codecs
                 raise RuntimeError(f"Failed to write animation to {save_path}: {exc}") from exc
+            if ext == ".gif":
+                print(f"[viz] GIF saved → {save_path}")
+            else:
+                print(f"[viz] Animation saved → {save_path}")
         else:  # pragma: no cover
             if not _INTERACTIVE_REQUESTED:
                 print("[viz] Headless backend active (set SWARM_INTERACTIVE=1 for a GUI window).")

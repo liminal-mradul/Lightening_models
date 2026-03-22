@@ -14,7 +14,7 @@ from __future__ import annotations
 import argparse
 import csv
 import os
-from typing import Dict, Optional
+from typing import Any, Dict, Optional, Type
 
 from swarm import Environment, Simulation
 from swarm.patterns import PatternEngine, PatternType
@@ -242,6 +242,7 @@ def export_outputs(sim: Simulation, output_dir: str, viz: "SwarmVisualizer", pre
         # Record a brief clip continuing from the current state
         temp_sim = _build_animation_sim(sim)
         temp_viz = SwarmVisualizer(temp_sim, figsize=DEFAULT_FIGSIZE)
+        print(f"[swarm] Saving GIF animation → {video_out}")
         temp_viz.run_animation(SNIPPET_STEPS, interval_ms=DEFAULT_INTERVAL_MS, save_path=video_out, fps=SNIPPET_FPS)
 
     if not os.path.exists(video_out):
@@ -249,12 +250,88 @@ def export_outputs(sim: Simulation, output_dir: str, viz: "SwarmVisualizer", pre
             f"Animation was expected at {video_out} but was not created. This may be caused by missing codecs (ffmpeg/pillow) or insufficient file permissions."
         )
 
-    return {
+    # --- Per-pattern individual views (3-D snapshot + top-down) ---
+    pattern_image_paths = _export_per_pattern_images(sim, output_dir, SwarmVisualizer)
+
+    result: Dict[str, str] = {
         "Snapshot": snapshot_path,
         "Top-down plot": topdown_path,
         "Positions CSV": csv_path,
-        "Animation": video_out,
+        "Animation (GIF)": video_out,
     }
+    result.update(pattern_image_paths)
+    return result
+
+
+# Number of warm-up steps used when rendering per-pattern preview images.
+_PATTERN_PREVIEW_STEPS = 20
+
+
+def _export_per_pattern_images(sim: Simulation, output_dir: str, SwarmVisualizer: Type[Any]) -> Dict[str, str]:
+    """Render a 3-D and top-down image for every non-IMAGE pattern.
+
+    A short simulation is run from the current environment state for each
+    pattern so that the pattern is clearly visible in the saved images.
+    Both a 3-D perspective view and a top-down XY projection are saved.
+
+    Parameters
+    ----------
+    sim:
+        Source simulation (used to clone environment geometry).
+    output_dir:
+        Directory under which ``patterns/`` sub-folder is created.
+    SwarmVisualizer:
+        The visualiser class (passed in to avoid circular imports).
+
+    Returns
+    -------
+    Dict[str, str]
+        Mapping ``"Pattern <NAME> 3D"`` / ``"Pattern <NAME> top-down"`` → path.
+    """
+    patterns_dir = os.path.join(output_dir, "patterns")
+    os.makedirs(patterns_dir, exist_ok=True)
+
+    # Determine which patterns to render (skip IMAGE – requires user image data)
+    image_config = sim.pattern_engine.get_image_pattern_config()
+    patterns_to_render = [
+        p for p in PatternType
+        if p is not PatternType.IMAGE or image_config is not None
+    ]
+
+    paths: Dict[str, str] = {}
+    for pattern in patterns_to_render:
+        name_lower = pattern.name.lower()
+        print(f"[swarm] Rendering per-pattern images: {pattern.name}")
+
+        # Build a dedicated short simulation for this pattern
+        cloned_env = _clone_environment(sim.env)
+        temp_sim = Simulation(
+            cloned_env,
+            pattern_sequence=[(pattern, float("inf"))],
+            dt=sim.dt,
+        )
+        if image_config is not None and pattern is PatternType.IMAGE:
+            # image_config is (img_arr, threshold, invert) from get_image_pattern_config()
+            img_arr, threshold, invert = image_config
+            temp_sim.pattern_engine.set_image_pattern(img_arr, threshold=threshold, invert=invert)
+
+        # Warm up so the pattern is clearly visible
+        for _ in range(_PATTERN_PREVIEW_STEPS):
+            temp_sim.step()
+
+        # 3-D perspective view
+        view3d_path = os.path.join(patterns_dir, f"pattern_{name_lower}_3d.png")
+        v3d = SwarmVisualizer(temp_sim, figsize=DEFAULT_FIGSIZE)
+        v3d.save_snapshot(view3d_path)
+
+        # Top-down view
+        topdown_path = os.path.join(patterns_dir, f"pattern_{name_lower}_topdown.png")
+        v3d.save_topdown(topdown_path, pattern_name=pattern.name)
+
+        paths[f"Pattern {pattern.name} 3D"] = view3d_path
+        paths[f"Pattern {pattern.name} top-down"] = topdown_path
+
+    return paths
 
 
 def _build_animation_sim(sim: Simulation) -> Simulation:
