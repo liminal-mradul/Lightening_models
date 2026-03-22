@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
+import os
 from typing import Optional, List
 
 import numpy as np
 
 try:
     import matplotlib
-    matplotlib.use("Agg")  # non-interactive backend (works in all environments)
+
+    _INTERACTIVE_REQUESTED = os.environ.get("SWARM_INTERACTIVE", "").lower() in {"1", "true", "yes"}
+    if not _INTERACTIVE_REQUESTED and "MPLBACKEND" not in os.environ:
+        matplotlib.use("Agg")  # non-interactive backend (works in all environments)
     import matplotlib.pyplot as plt
     from mpl_toolkits.mplot3d import Axes3D  # noqa: F401 (registers 3D projection)
     _MPL_AVAILABLE = True
@@ -30,6 +34,10 @@ class SwarmVisualizer:
     node_size:
         Marker size for each node in the scatter plot.
     """
+
+    TOPDOWN_SIZE_SCALE = 0.6
+    TOPDOWN_GRID_ALPHA = 0.2
+    TOPDOWN_GRID_COLOR = "#666666"
 
     def __init__(
         self,
@@ -69,16 +77,7 @@ class SwarmVisualizer:
     def render_frame(self) -> None:
         """Redraw the current swarm state."""
         positions = self.sim.env.get_positions()
-        colors = self.sim.env.get_led_colors()
-
-        # Nodes with led_on=False use a dim grey
-        display_colors = []
-        for i, node in enumerate(self.sim.env.nodes):
-            if node.led_on:
-                display_colors.append(colors[i])
-            else:
-                display_colors.append(np.array([0.15, 0.15, 0.15]))
-        display_colors = np.array(display_colors)
+        display_colors = self._display_colors()
 
         if self._scatter is not None:
             self._scatter.remove()
@@ -112,12 +111,39 @@ class SwarmVisualizer:
 
     # ------------------------------------------------------------------
 
+    def save_topdown(self, filepath: str) -> None:
+        """Save a 2-D top-down projection (XY plane) to *filepath*."""
+        positions = self.sim.env.get_positions()
+        display_colors = self._display_colors()
+
+        fig, ax = plt.subplots(figsize=(8, 6))
+        ax.scatter(
+            positions[:, 0],
+            positions[:, 1],
+            c=display_colors,
+            s=self.node_size * self.TOPDOWN_SIZE_SCALE,
+            alpha=0.9,
+        )
+        ax.set_xlabel("X")
+        ax.set_ylabel("Y")
+        ax.set_title("Swarm Top-Down View (XY)")
+        ax.set_aspect("equal")
+        bounds = self.sim.env.bounds
+        ax.set_xlim(-bounds[0], bounds[0])
+        ax.set_ylim(-bounds[1], bounds[1])
+        ax.grid(alpha=self.TOPDOWN_GRID_ALPHA, color=self.TOPDOWN_GRID_COLOR)
+        fig.savefig(filepath, dpi=140, bbox_inches="tight", facecolor=fig.get_facecolor())
+        plt.close(fig)
+
+    # ------------------------------------------------------------------
+
     def run_animation(
         self,
         n_steps: int,
         interval_ms: int = 50,
         save_path: Optional[str] = None,
         fps: int = 20,
+        close: bool = True,
     ) -> None:
         """Run the simulation while updating the plot in real time.
 
@@ -149,8 +175,35 @@ class SwarmVisualizer:
         )
 
         if save_path is not None:
-            anim.save(save_path, fps=fps, dpi=100)
+            ext = os.path.splitext(save_path)[1].lower()
+            writer = None
+            if ext == ".gif":
+                writer = "pillow"
+            elif ext in {".mp4", ".m4v"}:
+                writer = "ffmpeg"
+            try:
+                if writer is not None:
+                    anim.save(save_path, fps=fps, dpi=100, writer=writer)
+                else:
+                    anim.save(save_path, fps=fps, dpi=100)
+            except (ValueError, RuntimeError, OSError) as exc:  # pragma: no cover - depends on system codecs
+                raise RuntimeError(f"Failed to write animation to {save_path}: {exc}") from exc
         else:  # pragma: no cover
+            if not _INTERACTIVE_REQUESTED:
+                print("[viz] Headless backend active (set SWARM_INTERACTIVE=1 for a GUI window).")
             plt.show()
 
-        plt.close(self.fig)
+        if close:
+            plt.close(self.fig)
+
+    # ------------------------------------------------------------------
+
+    def _display_colors(self) -> np.ndarray:
+        colors = self.sim.env.get_led_colors()
+        display_colors: List[np.ndarray] = []
+        for i, node in enumerate(self.sim.env.nodes):
+            if node.led_on:
+                display_colors.append(colors[i])
+            else:
+                display_colors.append(np.array([0.15, 0.15, 0.15]))
+        return np.array(display_colors)
